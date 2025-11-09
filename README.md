@@ -16,11 +16,6 @@
 
 ---
 
-## Demo
-![demo](assets/demo.gif)
-
----
-
 ## Repo structure
 See the `slam/`, `planning/`, and `control/` folders for details. Each module includes:
 - code (`src/`)  
