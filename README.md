@@ -1,31 +1,29 @@
-# Autonomous Vehicle Stack — SLAM, Planning & Control
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](#license)
-[![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](#requirements)
-[![CI](https://github.com/<your-username>/autonomous-vehicle-stack/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-username>/autonomous-vehicle-stack/actions)
+# 🚘 Autonomous Driving Stack
 
-> End-to-end autonomous navigation stack including EKF-SLAM, Path Planning, and steering controllers (Pure Pursuit & Stanley). Built for simulation & real-robot integration (ROS2-ready).
+A complete autonomous driving software stack integrating **SLAM**, **Path Planning**, and **Control Algorithms** — developed for an FSAE-style autonomous vehicle.
 
 ---
 
-## 🚀 Highlights
-- EKF-SLAM for robust localization and mapping  
-- Path planner for smooth trajectories and obstacle avoidance  
-- Pure Pursuit and Stanley controllers for trajectory tracking  
-- ROS2 launch files for easy integration with simulators (Gazebo/ignition)  
-- Dockerized environment + CI for reproducible experiments
+## 🧠 Modules Overview
+
+### 🛰️ SLAM
+- **EKF-SLAM** implementation for localization and mapping using cone landmarks.
+- ROS 2 node subscribes to vehicle odometry and cone detections.
+
+### 🗺️ Planning
+- **Triangulation-based planner** for smooth local paths.
+- **Midpoint planner** for efficient cone-to-cone path generation.
+
+### ⚙️ Control
+- **Stanley Controller** for lateral control and stability.
+- **Pure Pursuit** for trajectory following.
 
 ---
 
-## Repo structure
-See the `slam/`, `planning/`, and `control/` folders for details. Each module includes:
-- code (`src/`)  
-- notebooks (`notebooks/`) where applicable  
-- tests (`tests/`) and CI checks
+## 📊 Visualization
+- Real-time trajectory and cone visualization using Matplotlib.
+- Displays the car’s live position and estimated map.
 
 ---
 
-## Quick start (local)
-1. Clone:
-```bash
-git clone https://github.com/<your-username>/autonomous-vehicle-stack.git
-cd autonomous-vehicle-stack
+## 🧩 Folder Structure
