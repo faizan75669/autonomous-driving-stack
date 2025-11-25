@@ -9,17 +9,19 @@ A complete autonomous driving software stack integrating **SLAM**, **Path Planni
 ###  SLAM
 - **EKF-SLAM** implementation for localization and mapping using cone landmarks.
 - ROS 2 node subscribes to vehicle odometry and cone detections.
-- ![planning](https://github.com/user-attachments/assets/05966335-7578-44c8-ae3a-ff3e20fbdd1e)
 
 
 ###  Planning
 - **Triangulation-based planner** for smooth local paths.
 - **Midpoint planner** for efficient cone-to-cone path generation.
+- ![planning](https://github.com/user-attachments/assets/0979890b-9f5c-451b-b5ba-a89a9136889a)
+
 - 
 
 ###  Control
 - **Stanley Controller** for lateral control and stability.
 - **Pure Pursuit** for trajectory following.
+- 
 
 ---
 
