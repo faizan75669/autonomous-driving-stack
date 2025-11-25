@@ -16,12 +16,12 @@ A complete autonomous driving software stack integrating **SLAM**, **Path Planni
 - **Midpoint planner** for efficient cone-to-cone path generation.
 - ![planning](https://github.com/user-attachments/assets/0979890b-9f5c-451b-b5ba-a89a9136889a)
 
-- 
 
 ###  Control
 - **Stanley Controller** for lateral control and stability.
 - **Pure Pursuit** for trajectory following.
-- 
+- ![pure](https://github.com/user-attachments/assets/34008751-45e6-4714-ba5a-92c365adb5bd)
+
 
 ---
 
