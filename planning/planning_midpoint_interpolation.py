@@ -1,131 +1,119 @@
-"""
-Basic Planning code using midpoints between yellow and blue cones with path interpolation. 
-Note: The algorithm was producing irregular trajectories around corners.
+"""Centerline planner using one-to-one blue/yellow cone pairing.
 
+This is the simple baseline planner in the repository. It does not claim
+obstacle avoidance; the RRT* implementation is provided separately.
 """
+from __future__ import annotations
 
-from eufs_msgs.msg import WaypointArrayStamped, Waypoint, ConeArrayWithCovariance, ConeWithCovariance
+from typing import List
+import numpy as np
+from scipy.interpolate import splprep, splev
+import rclpy
+from rclpy.node import Node
 from geometry_msgs.msg import Point
 from visualization_msgs.msg import Marker
-from rclpy.node import Node
-import rclpy
-import numpy as np
-from scipy import interpolate
-from typing import List
+from eufs_msgs.msg import WaypointArrayStamped, ConeArrayWithCovariance, ConeWithCovariance, Waypoint
 
-class Planner(Node):
-    def __init__(self, name: str):
+
+class MidpointPlanner(Node):
+    def __init__(self, name: str = "midpoint_planner") -> None:
         super().__init__(name)
-        self.threshold = self.declare_parameter("threshold", 6.0).value
+        self.declare_parameter("cone_topic", "/fusion/cones")
+        self.declare_parameter("trajectory_topic", "/trajectory")
+        self.declare_parameter("interpolation_points", 100)
+        self.declare_parameter("smoothing", 0.0)
+        self.create_subscription(ConeArrayWithCovariance, self.get_parameter("cone_topic").value, self._cones_cb, 10)
+        self.path_pub = self.create_publisher(WaypointArrayStamped, self.get_parameter("trajectory_topic").value, 10)
+        self.viz_pub = self.create_publisher(Marker, "/planner/viz", 10)
 
-        self.cones_sub = self.create_subscription(
-            ConeArrayWithCovariance, 
-            "/fusion/cones", 
-            self.cones_callback, 
-            1
+    @staticmethod
+    def convert(cones: List[ConeWithCovariance]) -> np.ndarray:
+        if not cones:
+            return np.empty((0, 2))
+        return np.asarray([[c.point.x, c.point.y] for c in cones], dtype=float)
+
+    @staticmethod
+    def pair_midpoints(blue: np.ndarray, yellow: np.ndarray) -> np.ndarray:
+        """Greedy one-to-one nearest-neighbor pairing, starting with closest pairs."""
+        if len(blue) == 0 or len(yellow) == 0:
+            return np.empty((0, 2))
+        candidates = sorted(
+            (float(np.linalg.norm(b - y)), i, j)
+            for i, b in enumerate(blue) for j, y in enumerate(yellow)
         )
+        used_b, used_y, mids = set(), set(), []
+        for _, i, j in candidates:
+            if i in used_b or j in used_y:
+                continue
+            used_b.add(i)
+            used_y.add(j)
+            mids.append((blue[i] + yellow[j]) * 0.5)
+        return MidpointPlanner.order_forward(np.asarray(mids, dtype=float))
 
-        self.track_line_pub = self.create_publisher(WaypointArrayStamped, "/trajectory", 1)
-        self.visualization_pub = self.create_publisher(Marker, "/planner/viz", 1)
+    @staticmethod
+    def order_forward(points: np.ndarray) -> np.ndarray:
+        """Order local points by walking to the nearest next point from the vehicle."""
+        if len(points) < 2:
+            return points
+        remaining = [p.copy() for p in points]
+        ordered = [remaining.pop(int(np.argmin([np.linalg.norm(p) for p in remaining])))]
+        while remaining:
+            idx = int(np.argmin([np.linalg.norm(p - ordered[-1]) for p in remaining]))
+            ordered.append(remaining.pop(idx))
+        return np.asarray(ordered)
 
-    def cones_callback(self, msg: ConeArrayWithCovariance):
-        blue_cones = self.convert(msg.blue_cones)
-        yellow_cones = self.convert(msg.yellow_cones)
-        orange_cones = np.concatenate(
-            (self.convert(msg.orange_cones), self.convert(msg.big_orange_cones))
-        )
-
-        midpoints = self.compute_midpoints(blue_cones, yellow_cones, orange_cones)
-        midpoints = self.sort_midpoints(midpoints)
-
-        if len(midpoints) == 0:
-            return
-
+    def interpolate(self, points: np.ndarray) -> np.ndarray:
+        if len(points) < 3:
+            return points
         try:
-            tck, _ = interpolate.splprep([midpoints[:, 0], midpoints[:, 1]], s=100, k=min(3, len(midpoints) - 1))
-            midpoints_interp = interpolate.splev(np.linspace(0, 1, 100), tck)
-            midpoints = np.vstack(midpoints_interp).T
-        except Exception:
-            pass
+            k = min(3, len(points) - 1)
+            tck, _ = splprep([points[:, 0], points[:, 1]], s=float(self.get_parameter("smoothing").value), k=k)
+            u = np.linspace(0.0, 1.0, int(self.get_parameter("interpolation_points").value))
+            x, y = splev(u, tck)
+            return np.column_stack((x, y))
+        except (ValueError, TypeError):
+            return points
 
-        self.publish_path(midpoints)
-        self.publish_visualization(midpoints)
+    def _cones_cb(self, msg: ConeArrayWithCovariance) -> None:
+        blue = self.convert(msg.blue_cones)
+        yellow = self.convert(msg.yellow_cones)
+        path = self.interpolate(self.pair_midpoints(blue, yellow))
+        if len(path) == 0:
+            return
+        self._publish(path)
 
-    def compute_midpoints(self, blue_cones: np.ndarray, yellow_cones: np.ndarray, orange_cones: np.ndarray = None):
-        if len(blue_cones) == 0 or len(yellow_cones) == 0:
-            return np.array([])
+    def _publish(self, points: np.ndarray) -> None:
+        msg = WaypointArrayStamped()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = "base_footprint"
+        for p in points:
+            msg.waypoints.append(Waypoint(position=Point(x=float(p[0]), y=float(p[1]))))
+        self.path_pub.publish(msg)
 
-        min_len = min(len(blue_cones), len(yellow_cones))
-        midpoints = [(blue_cones[i] + yellow_cones[i]) / 2.0 for i in range(min_len)]
-
-        if orange_cones is not None and len(orange_cones) >= 2:
-            start_orange = np.mean(orange_cones[:2], axis=0)
-            end_orange = np.mean(orange_cones[-2:], axis=0)
-            midpoints.insert(0, start_orange)
-            midpoints.append(end_orange)
-
-        return np.array(midpoints)
-
-    def sort_midpoints(self, midpoints: np.ndarray):
-        if len(midpoints) < 2:
-            return midpoints
-
-        midpoints = midpoints.tolist()
-        sorted_points = [midpoints.pop(0)]
-
-        while midpoints:
-            last_point = np.array(sorted_points[-1])
-            distances = [np.linalg.norm(last_point - np.array(p)) for p in midpoints]
-            nearest_index = int(np.argmin(distances))
-            sorted_points.append(midpoints.pop(nearest_index))
-
-        return np.array(sorted_points)
-
-    def publish_path(self, midpoints: np.ndarray):
-        waypoint_array = WaypointArrayStamped()
-        waypoint_array.header.frame_id = "base_footprint"
-        waypoint_array.header.stamp = self.get_clock().now().to_msg()
-
-        for p in midpoints:
-            waypoint = Waypoint(position=Point(x=p[0], y=p[1]))
-            waypoint_array.waypoints.append(waypoint)
-
-        self.track_line_pub.publish(waypoint_array)
-
-    def publish_visualization(self, midpoints: np.ndarray):
         marker = Marker()
-        marker.header.frame_id = "base_footprint"
-        marker.header.stamp = self.get_clock().now().to_msg()
-        marker.type = Marker.POINTS
-        marker.action = Marker.ADD
-        marker.color.a = 1.0
-        marker.color.r = 0.0
-        marker.color.g = 1.0
-        marker.color.b = 0.0
-        marker.id = 0
-        marker.scale.x = 0.35
-        marker.scale.y = 0.35
+        marker.header = msg.header
         marker.ns = "midpoints"
+        marker.id = 0
+        marker.type = Marker.LINE_STRIP
+        marker.action = Marker.ADD
+        marker.scale.x = 0.08
+        marker.color.a = 1.0
+        for p in points:
+            marker.points.append(Point(x=float(p[0]), y=float(p[1])))
+        self.viz_pub.publish(marker)
 
-        for midpoint in midpoints:
-            marker.points.append(Point(x=midpoint[0], y=midpoint[1]))
 
-        self.visualization_pub.publish(marker)
-
-    def convert(self, cones: List[ConeWithCovariance], struct: str = '') -> np.ndarray:
-        if struct == "complex":
-            return np.array([c.point.x + 1j * c.point.y for c in cones])
-        return np.array([[c.point.x, c.point.y] for c in cones])
-
-def main():
-    rclpy.init(args=None)
-    node = Planner("local_planner")
+def main(args=None) -> None:
+    rclpy.init(args=args)
+    node = MidpointPlanner()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
+        pass
+    finally:
         node.destroy_node()
         rclpy.shutdown()
 
+
 if __name__ == "__main__":
     main()
-
