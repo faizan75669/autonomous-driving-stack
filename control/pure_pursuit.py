@@ -1,15 +1,9 @@
-"""ROS 2 Pure Pursuit controller for a local ``base_footprint`` path.
-
-The planner in this repository publishes waypoints in the vehicle frame, so
-this controller intentionally does not add the vehicle's global position to
-waypoints. The target bearing is computed directly from local x/y.
-"""
+"""ROS 2 Pure Pursuit controller for a local ``base_footprint`` path."""
 from __future__ import annotations
 
 import math
 import time
 from typing import Optional
-
 import numpy as np
 import rclpy
 from rclpy.node import Node
@@ -23,7 +17,7 @@ def normalize_angle(angle: float) -> float:
 
 def pure_pursuit_steering(target_x: float, target_y: float, wheelbase: float, lookahead: float,
                           max_steer: float = 0.5) -> float:
-    """Return Ackermann steering angle for a target in the vehicle frame."""
+    """Return Ackermann steering for a target expressed in vehicle-local coordinates."""
     if lookahead <= 1e-6:
         return 0.0
     alpha = math.atan2(target_y, target_x)
@@ -47,7 +41,6 @@ class PurePursuitNode(Node):
         self.declare_parameter("ki_speed", 0.0)
         self.declare_parameter("kd_speed", 0.05)
         self.declare_parameter("max_accel", 5.0)
-
         self.L = float(self.get_parameter("wheelbase").value)
         self.min_ld = float(self.get_parameter("min_lookahead").value)
         self.max_ld = float(self.get_parameter("max_lookahead").value)
@@ -58,18 +51,14 @@ class PurePursuitNode(Node):
         self.ki = float(self.get_parameter("ki_speed").value)
         self.kd = float(self.get_parameter("kd_speed").value)
         self.max_accel = float(self.get_parameter("max_accel").value)
-
         self.speed = 0.0
         self.integral = 0.0
         self.previous_error = 0.0
         self.previous_time: Optional[float] = None
-
-        self.path_topic = self.get_parameter("path_topic").value
-        self.state_topic = self.get_parameter("state_topic").value
-        self.cmd_topic = self.get_parameter("cmd_topic").value
-        self.create_subscription(WaypointArrayStamped, self.path_topic, self._path_cb, 10)
-        self.create_subscription(CarState, self.state_topic, self._state_cb, 10)
-        self.cmd_pub = self.create_publisher(AckermannDriveStamped, self.cmd_topic, 10)
+        self.frame_warning_sent = False
+        self.create_subscription(WaypointArrayStamped, self.get_parameter("path_topic").value, self._path_cb, 10)
+        self.create_subscription(CarState, self.get_parameter("state_topic").value, self._state_cb, 10)
+        self.cmd_pub = self.create_publisher(AckermannDriveStamped, self.get_parameter("cmd_topic").value, 10)
         self.get_logger().info("Pure Pursuit controller started (local-frame path)")
 
     def _state_cb(self, msg: CarState) -> None:
@@ -100,8 +89,10 @@ class PurePursuitNode(Node):
         path = self._path(msg)
         if len(path) == 0:
             return
-        if str(msg.header.frame_id) not in ("", "base_footprint"):
-            self.get_logger().warn_once("Expected a local base_footprint path; received another frame")
+        frame = str(msg.header.frame_id)
+        if frame not in ("", "base_footprint") and not self.frame_warning_sent:
+            self.get_logger().warn("Expected a base_footprint trajectory; received another frame")
+            self.frame_warning_sent = True
         target, ld = self._select_target(path)
         steering = pure_pursuit_steering(target[0], target[1], self.L, ld, self.max_steer)
         cmd = AckermannDriveStamped()
