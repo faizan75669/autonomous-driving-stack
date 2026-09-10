@@ -1,17 +1,7 @@
-"""ROS 2 adapter for the repository's EKF-SLAM implementation.
-
-The filter itself lives in :mod:`ekf_slam_core` and is ROS-independent.
-This node accepts cone detections in the vehicle frame and velocity/yaw-rate
-odometry, performs range/bearing EKF-SLAM, and publishes the estimated pose.
-
-This implementation deliberately does not use ground-truth pose as an EKF
-measurement. Ground truth can be used externally for evaluation only.
-"""
+"""ROS 2 adapter for the repository's ROS-independent EKF-SLAM core."""
 from __future__ import annotations
 
 import math
-from typing import Optional
-
 import numpy as np
 import rclpy
 from rclpy.node import Node
@@ -26,13 +16,11 @@ except ImportError:
 
 
 def quaternion_to_yaw(q) -> float:
-    return math.atan2(
-        2.0 * (q.w * q.z + q.x * q.y),
-        1.0 - 2.0 * (q.y * q.y + q.z * q.z),
-    )
+    return math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
 
 
 class EKFSLAMNode(Node):
+    """Cone EKF-SLAM node. Ground truth is intentionally not used by the filter."""
     def __init__(self) -> None:
         super().__init__("ekf_slam_node")
         self.declare_parameter("cones_topic", "/cones")
@@ -42,81 +30,68 @@ class EKFSLAMNode(Node):
         self.declare_parameter("min_range", 0.2)
         self.declare_parameter("max_range", 30.0)
         self.declare_parameter("max_detections", 30)
-
-        cfg = EKFConfig(
-            association_gate=float(self.get_parameter("association_gate").value)
-        )
-        self.filter = EKFSLAMCore(cfg)
+        self.filter = EKFSLAMCore(EKFConfig(
+            association_gate=float(self.get_parameter("association_gate").value)))
         self.min_range = float(self.get_parameter("min_range").value)
         self.max_range = float(self.get_parameter("max_range").value)
         self.max_detections = int(self.get_parameter("max_detections").value)
+        self.last_time = None
+        self.last_yaw = None
 
-        self.last_stamp = None
-        self.last_odom_yaw: Optional[float] = None
-        self.last_odom_time = None
-
-        cones_topic = self.get_parameter("cones_topic").value
-        odom_topic = self.get_parameter("odom_topic").value
-        pose_topic = self.get_parameter("pose_topic").value
-
-        self.create_subscription(ConeArrayWithCovariance, cones_topic, self._cones_cb, 10)
-        self.create_subscription(Odometry, odom_topic, self._odom_cb, 20)
-        self.pose_pub = self.create_publisher(PoseStamped, pose_topic, 10)
+        self.create_subscription(ConeArrayWithCovariance, self.get_parameter("cones_topic").value, self._cones_cb, 10)
+        self.create_subscription(Odometry, self.get_parameter("odom_topic").value, self._odom_cb, 20)
+        self.pose_pub = self.create_publisher(PoseStamped, self.get_parameter("pose_topic").value, 10)
         self.get_logger().info("EKF-SLAM node started")
 
     def _odom_cb(self, msg: Odometry) -> None:
-        now = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
-        if self.last_odom_time is None:
-            self.last_odom_time = now
-            self.last_odom_yaw = quaternion_to_yaw(msg.pose.pose.orientation)
-            return
-
-        dt = now - self.last_odom_time
-        if dt <= 0.0 or dt > 1.0:
-            self.last_odom_time = now
-            self.last_odom_yaw = quaternion_to_yaw(msg.pose.pose.orientation)
-            return
-
+        stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
         yaw = quaternion_to_yaw(msg.pose.pose.orientation)
-        previous_yaw = self.last_odom_yaw if self.last_odom_yaw is not None else yaw
-        yaw_rate = self._angle_diff(yaw, previous_yaw) / dt
-        speed = float(msg.twist.twist.linear.x)
-        self.filter.predict(speed, yaw_rate, dt)
-        self.last_odom_time = now
-        self.last_odom_yaw = yaw
-        self._publish_pose(msg.header.stamp)
+        if self.last_time is None:
+            self.last_time, self.last_yaw = stamp, yaw
+            return
+        dt = stamp - self.last_time
+        if not 0.0 < dt <= 1.0:
+            self.last_time, self.last_yaw = stamp, yaw
+            return
+        yaw_rate = self._angle_diff(yaw, self.last_yaw) / dt
+        self.filter.predict(float(msg.twist.twist.linear.x), yaw_rate, dt)
+        self.last_time, self.last_yaw = stamp, yaw
+        self._publish(msg.header.stamp)
 
     def _cones_cb(self, msg: ConeArrayWithCovariance) -> None:
         detections = []
-        # Color is not part of the geometric measurement model. It can be
-        # incorporated later as a landmark-classification/data-association cue.
-        for cone in list(msg.blue_cones) + list(msg.yellow_cones) + list(msg.big_orange_cones):
-            x = float(cone.point.x)
-            y = float(cone.point.y)
-            r = math.hypot(x, y)
-            if self.min_range <= r <= self.max_range:
-                detections.append((r, math.atan2(y, x)))
+        for landmark_type, cones in (
+            ("blue", msg.blue_cones),
+            ("yellow", msg.yellow_cones),
+            ("orange", msg.big_orange_cones),
+        ):
+            for cone in cones:
+                x, y = float(cone.point.x), float(cone.point.y)
+                r = math.hypot(x, y)
+                if self.min_range <= r <= self.max_range:
+                    detections.append((np.array([r, math.atan2(y, x)]), landmark_type))
+                if len(detections) >= self.max_detections:
+                    break
             if len(detections) >= self.max_detections:
                 break
 
-        for measurement in detections:
-            idx = self.filter.associate(np.asarray(measurement))
+        for measurement, landmark_type in detections:
+            idx = self.filter.associate(measurement, landmark_type)
             if idx is None:
-                self.filter.add_landmark(np.asarray(measurement))
+                self.filter.add_landmark(measurement, landmark_type)
             else:
-                self.filter.update(np.asarray(measurement), idx)
+                self.filter.update(measurement, idx)
+        self._publish(msg.header.stamp)
 
-        self._publish_pose(msg.header.stamp)
-
-    def _publish_pose(self, stamp) -> None:
-        msg = PoseStamped()
-        msg.header.stamp = stamp
-        msg.header.frame_id = "map"
-        msg.pose.position.x = float(self.filter.state[0])
-        msg.pose.position.y = float(self.filter.state[1])
-        msg.pose.orientation.z = math.sin(self.filter.state[2] / 2.0)
-        msg.pose.orientation.w = math.cos(self.filter.state[2] / 2.0)
-        self.pose_pub.publish(msg)
+    def _publish(self, stamp) -> None:
+        pose = PoseStamped()
+        pose.header.stamp = stamp
+        pose.header.frame_id = "map"
+        pose.pose.position.x = float(self.filter.state[0])
+        pose.pose.position.y = float(self.filter.state[1])
+        pose.pose.orientation.z = math.sin(self.filter.state[2] / 2.0)
+        pose.pose.orientation.w = math.cos(self.filter.state[2] / 2.0)
+        self.pose_pub.publish(pose)
 
     @staticmethod
     def _angle_diff(a: float, b: float) -> float:
