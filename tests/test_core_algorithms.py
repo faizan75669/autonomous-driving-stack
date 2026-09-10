@@ -11,8 +11,7 @@ sys.path.insert(0, str(ROOT / "control"))
 
 from ekf_slam_core import EKFSLAMCore
 from rrt_star import RRTStar
-from pure_pursuit import pure_pursuit_steering
-from stanley import stanley_steering
+from control_core import pure_pursuit_steering, stanley_steering
 
 
 def test_ekf_add_landmark_and_update():
