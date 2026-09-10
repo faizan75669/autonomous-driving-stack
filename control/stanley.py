@@ -4,7 +4,6 @@ from __future__ import annotations
 import math
 import time
 from typing import Optional
-
 import numpy as np
 import rclpy
 from rclpy.node import Node
@@ -30,10 +29,8 @@ def stanley_steering(path: np.ndarray, speed: float, wheelbase: float,
     """Stanley steering for a path whose coordinates are vehicle-local."""
     if len(path) < 2:
         return 0.0
-    # Stanley convention: evaluate error at the front axle.
     fx, fy = wheelbase, 0.0
-    dists = np.linalg.norm(path - np.array([fx, fy]), axis=1)
-    idx = int(np.argmin(dists))
+    idx = int(np.argmin(np.linalg.norm(path - np.array([fx, fy]), axis=1)))
     j = min(idx + 1, len(path) - 1)
     if j == idx:
         j = max(0, idx - 1)
@@ -44,11 +41,7 @@ def stanley_steering(path: np.ndarray, speed: float, wheelbase: float,
     length = math.hypot(tx, ty)
     if length < 1e-9:
         return 0.0
-
-    path_heading = math.atan2(ty, tx)
-    # Vehicle heading is zero in its local frame.
-    heading_error = normalize_angle(path_heading)
-    # Positive means front axle is left of the path tangent.
+    heading_error = normalize_angle(math.atan2(ty, tx))
     cross_track = ((fx - cx) * (-ty) + (fy - cy) * tx) / length
     correction = math.atan2(gain * cross_track, abs(speed) + softening)
     return float(np.clip(normalize_angle(heading_error + correction), -max_steer, max_steer))
@@ -69,7 +62,6 @@ class StanleyNode(Node):
         self.declare_parameter("ki_speed", 0.0)
         self.declare_parameter("kd_speed", 0.05)
         self.declare_parameter("max_accel", 5.0)
-
         self.k = float(self.get_parameter("stanley_k").value)
         self.softening = float(self.get_parameter("stanley_softening").value)
         self.L = float(self.get_parameter("wheelbase").value)
@@ -83,7 +75,7 @@ class StanleyNode(Node):
         self.integral = 0.0
         self.previous_error = 0.0
         self.previous_time: Optional[float] = None
-
+        self.frame_warning_sent = False
         self.create_subscription(WaypointArrayStamped, self.get_parameter("path_topic").value, self._path_cb, 10)
         self.create_subscription(CarState, self.get_parameter("state_topic").value, self._state_cb, 10)
         self.cmd_pub = self.create_publisher(AckermannDriveStamped, self.get_parameter("cmd_topic").value, 10)
@@ -106,8 +98,10 @@ class StanleyNode(Node):
         path = np.asarray([[p.position.x, p.position.y] for p in msg.waypoints], dtype=float)
         if len(path) < 2:
             return
-        if str(msg.header.frame_id) not in ("", "base_footprint"):
-            self.get_logger().warn_once("Expected base_footprint trajectory; frame mismatch may invalidate control")
+        frame = str(msg.header.frame_id)
+        if frame not in ("", "base_footprint") and not self.frame_warning_sent:
+            self.get_logger().warn("Expected a base_footprint trajectory; received another frame")
+            self.frame_warning_sent = True
         steering = stanley_steering(path, self.speed, self.L, self.k, self.softening, self.max_steer)
         cmd = AckermannDriveStamped()
         cmd.header.stamp = self.get_clock().now().to_msg()
