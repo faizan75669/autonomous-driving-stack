@@ -1,8 +1,8 @@
 # Driverless Software (Team FERN, FS-AI 2025)
 
-This is the ROS 2 software for our Formula Student AI car: state estimation, cone mapping,
-path planning and control. Team FERN took part in FS-AI 2025 at Silverstone, UK. We
-developed everything in the [EUFS simulator](https://gitlab.com/eufs/eufs_sim)
+This is the ROS 2 autonomous software I wrote for Team FERN (PNEC) for Formula Student AI
+2025 at Silverstone, UK, where we finished 17th overall: state estimation, cone mapping,
+path planning and control. I developed everything in the [EUFS simulator](https://gitlab.com/eufs/eufs_sim)
 (ROS 2 Galactic, Ubuntu 20.04, Python 3.8).
 
 ![Laps on all EUFS tracks](docs/media/laps_overview.png)
@@ -21,7 +21,7 @@ flowchart LR
 
 Planning and control work in the car frame (car at 0,0 looking along x), because the cones
 come in that frame. Only the EKF and the mapping use the map frame. Mixing these two frames
-was the cause of a lot of our early bugs.
+was the cause of a lot of my early bugs.
 
 ## The packages
 
@@ -52,7 +52,7 @@ I did the planners in this order:
    colour, sorted from the car, then a spline. Simple, works when the track is clear, but
    my first version paired cones in the order they came in the message and went zig-zag in
    corners.
-2. **Delaunay planner** (the one we use): triangulate the cones, keep the blue-yellow edges
+2. **Delaunay planner** (the one I use): triangulate the cones, keep the blue-yellow edges
    ("gates"), walk from gate to gate starting at the car, fit a spline. It does not get
    confused by cones from other parts of the track, because those never make a blue-yellow gate.
 3. **RRT with Delaunay**: an RRT grown from the car, sampling around the Delaunay midpoints,
