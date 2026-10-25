@@ -24,7 +24,7 @@ the car's software is split (each one is a ROS 2 package):
 | Folder | What it does |
 |---|---|
 | [`state_estimation/`](driverless-software/state_estimation) | EKF that fuses wheel odometry, IMU yaw and GPS into the car's pose |
-| [`slam/`](driverless-software/slam) | Builds the cone map from detections + EKF pose, counts laps, detects loop closure |
+| [`slam/`](driverless-software/slam) | Builds the cone map, corrects the pose against it, counts laps, detects loop closure |
 | [`planning/`](driverless-software/planning) | Three local planners: midpoint (my first one), RRT, and the Delaunay planner we use |
 | [`control/`](driverless-software/control) | Pure pursuit and Stanley steering controllers with PID speed control |
 | [`bringup/`](driverless-software/bringup) | One launch file + one params file to run the whole stack with the simulator |

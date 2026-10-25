@@ -31,28 +31,71 @@ so now only the EKF and the mapping work in the map frame.
 ### `state_estimation`: EKF
 [`ekf_node.py`](state_estimation/state_estimation/ekf_node.py)
 
-State is `[x, y, yaw, v]`. Prediction uses a unicycle model driven by wheel speed and yaw
-rate; the update uses position (GPS converted to x/y, or odometry position when there is no
-GPS) and the IMU yaw. The maths is kept in a small `EKF` class with no ROS inside, so it can
-be tested on its own.
+State is `[x, y, yaw, v]`. Prediction uses a unicycle model driven by wheel speed, yaw rate
+and the slip angle (from the body-frame `vx, vy` of the odometry, the car does not move
+exactly where it points in a corner). Updates: GPS position (converted from lat/lon, each fix
+used once) and IMU yaw. Without GPS it dead-reckons; the integrated odometry *position* is not
+used by default because it drifts without limit. The EKF integrates over the real elapsed time
+between timer calls and publishes its covariance, which the mapping node uses. The maths is in
+a small `EKF` class with no ROS inside, so it can be tested on its own.
 
 ![EKF estimate](docs/media/ekf_estimate.png)
 
-With position noise of 0.6 m (sigma) the filter brings the mean position error from
-0.74 m down to 0.20 m.
-
-### `slam`: cone mapping and loop closure
+### `slam`: cone mapping, pose correction and loop closure
 [`cone_mapping_node.py`](slam/slam/cone_mapping_node.py)
 
-Each cone detection is moved into the map frame with the EKF pose. Then
-`LocalOutlierFactor` removes stray detections, `DBSCAN` groups detections of the same cone
-(the group mean is the cone), a `KDTree` of older cones detects loop closure, and passing the
-orange cones counts laps. The map is published on `/slam/map`.
+1. The pose is moved forward to the time of the cone message (pose and cones never arrive at
+   the same moment; at 3 m/s a 50 ms delay smears every cone by 15 cm).
+2. **Pose correction:** cones seen now are matched with well established cones in the map and
+   a small translation pulls the pose back onto the map. When the EKF is confident (GPS) the
+   correction decays back to zero, when it is dead-reckoning the correction holds the drift.
+3. Detections go into the map frame with a weight that drops with distance (camera depth noise
+   grows very fast with range), beyond 10 m they are ignored.
+4. `LocalOutlierFactor` keeps stray detections out of the clustering, `DBSCAN` groups the
+   detections of one cone, clusters too wide for one cone are split again (two cones 1 m apart
+   used to merge), and the cone is the weighted mean, published with its covariance.
+5. Only the area within 25 m of the car is re-clustered, the rest of the map is frozen, so the
+   update time does not grow with the track (23 ms on the 208-cone `rand` track).
+6. **Loop closure** when most cones seen now were first seen more than 30 s ago; **laps**
+   when the car comes back to the orange start line in the map.
+
+`/slam/map` has the cones (with covariance), `/slam/pose` the corrected pose, `/slam/reset`
+clears everything, and `plot: true` opens a live map with the EKF 95 % uncertainty ellipse.
 
 ![Cone map](docs/media/cone_map.png)
 
-To be honest about the name: this is mapping on top of the EKF pose, not full EKF-SLAM yet.
-The cone positions do not correct the car pose. That is the next step (see roadmap).
+**How it was tested** ([`slam_eval.py`](tools/offline_sim/slam_eval.py)): the car drives two laps
+with the normal stack while the real EKF node and the real mapping node get simulated sensors:
+wheel odometry with a 1 % speed error and a gyro bias (it drifts), IMU yaw, GPS with 0.5 m
+noise (or no GPS), and cone detections with the EUFS perception noise model.
+
+Two laps per track (one for `hairpins`, 980 cones), seed 0:
+
+| Track | GPS | EKF error mean / max | Map error mean | Cones within 0.5 m | Same, after removing global shift | Fake cones | Laps counted / real | Loop closure (lap time) |
+|---|---|---|---|---|---|---|---|---|
+| `small_track` | no | 0.38 / 0.63 m | 0.36 m | 64/67 | 67/67 | 0 | 1/1 | 36s (34 s) |
+| `peanut` | no | 0.28 / 0.57 m | 0.18 m | 118/118 | 118/118 | 0 | 1/1 | 33s (33 s) |
+| `bone` | no | 0.29 / 0.59 m | 0.25 m | 106/106 | 106/106 | 0 | 1/1 | 37s (36 s) |
+| `boa_constrictor` | no | 0.24 / 0.47 m | 0.18 m | 95/95 | 95/95 | 0 | 1/1 | 53s (28 s) |
+| `rectangle` | no | 0.31 / 0.58 m | 0.25 m | 92/92 | 92/92 | 0 | 1/1 | 31s (31 s) |
+| `its_a_mess` | no | 0.24 / 0.50 m | 0.15 m | 132/132 | 132/132 | 0 | 1/1 | 33s (32 s) |
+| `rand` | no | 0.71 / 1.34 m | 0.30 m | 49/208 | 95/208 | 22 | 1/1 | 135s (135 s) |
+| `small_track` | yes | 0.21 / 0.68 m | 0.12 m | 67/67 | 67/67 | 0 | 1/1 | 35s (34 s) |
+| `peanut` | yes | 0.22 / 0.74 m | 0.10 m | 118/118 | 118/118 | 0 | 1/1 | 33s (33 s) |
+| `bone` | yes | 0.21 / 0.77 m | 0.09 m | 106/106 | 106/106 | 0 | 1/1 | 36s (36 s) |
+| `boa_constrictor` | yes | 0.22 / 0.70 m | 0.11 m | 95/95 | 95/95 | 0 | 1/1 | 35s (28 s) |
+| `rectangle` | yes | 0.21 / 0.76 m | 0.12 m | 92/92 | 92/92 | 0 | 1/1 | 31s (31 s) |
+| `its_a_mess` | yes | 0.21 / 0.63 m | 0.09 m | 131/132 | 131/132 | 0 | 1/1 | 33s (32 s) |
+| `rand` | yes | 0.19 / 0.79 m | 0.12 m | 204/208 | 204/208 | 0 | 1/1 | 135s (135 s) |
+| `hairpins_increasing_difficulty` (1 lap) | yes | 0.20 / 0.74 m | 0.12 m | 980/980 | 980/980 | 0 | 0/0 | not reached (1 lap) (267 s) |
+
+What this means honestly:
+- With GPS the map is good on every track (about 10 cm mean error, no fake cones).
+- Without GPS the map **shape** is right on normal tracks, but the whole map can be shifted by
+  the odometry drift (e.g. 36 cm on `small_track`), there is nothing absolute to correct it.
+- Without GPS on a long track (`rand`, 2 laps of 135 s) the drift (up to 1.3 m) is too much for
+  this simple correction: the map gets duplicated cones. Fixing that needs real SLAM with
+  loop-closure optimisation (pose graph), which is the next item on the roadmap.
 
 ### `planning`: three planners, one in use
 All three subscribe to `/ground_truth/cones` and publish `/trajectory`.
@@ -172,7 +215,8 @@ plugin (15 m range, 120 degree field of view).
 ```bash
 pip install numpy scipy scikit-learn matplotlib pytest
 
-python3 -m pytest tests -q                       # 12 tests, about 10 s
+python3 -m pytest tests -q                       # 18 tests, about 40 s
+python3 tools/offline_sim/slam_eval.py           # EKF + mapping on 7 tracks, with and without GPS
 python3 tools/offline_sim/sim.py                 # one lap on every track
 python3 tools/offline_sim/sim.py peanut --planner rrt_planner --controller stanley
 python3 tools/offline_sim/make_figures.py        # regenerate the figures in docs/media
@@ -183,7 +227,7 @@ wrong signs and crashes on empty messages, show up here in seconds.
 
 ## Roadmap
 
-- [ ] Full EKF-SLAM: add cone positions to the filter state so the map corrects the pose
+- [ ] Pose-graph SLAM with loop-closure optimisation, so long runs without GPS stay consistent
 - [ ] Tighter tracking in hairpins: blend Stanley cross-track correction into pure pursuit
 - [ ] Wider line into hairpins (racing line that is stable from frame to frame)
 - [ ] RRT* version of the RRT planner (cost-to-come and rewiring)
