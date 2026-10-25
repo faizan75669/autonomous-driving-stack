@@ -118,8 +118,8 @@ class StateEstimation(Node):
         self.lon0 = self.declare_parameter("gps_origin_lon", 3.1864915020968305).value
         self.gps_std = self.declare_parameter("gps_noise", 0.5).value              # [m]
         self.imu_yaw_std = self.declare_parameter("imu_yaw_noise", 0.02).value     # [rad]
-        # Integrated odometry position drifts without bound, so by default it is
-        # NOT used as a measurement. Without GPS the filter dead-reckons with
+        # Integrated odometry position keeps drifting, so by default it is
+        # not used as a measurement. Without GPS the filter dead-reckons with
         # wheel speed + yaw rate and corrects the heading with the IMU.
         self.use_odom_position = self.declare_parameter("use_odom_position", False).value
         self.odom_pos_std = self.declare_parameter("odom_position_noise", 1.0).value
@@ -138,7 +138,6 @@ class StateEstimation(Node):
         self.create_subscription(CarState, "/odometry_integration/car_state", self.odom_cb, qos)
         self.create_subscription(NavSatFix, "/gps", self.gps_cb, qos)
         self.create_subscription(Imu, "/imu/data", self.imu_cb, qos)
-        # create the publisher ONCE (old code made a new one every timer tick)
         self.pub = self.create_publisher(CarState, "/odometry_filtered/car_state", 10)
         self.create_timer(dt, self.update)
 

@@ -34,7 +34,7 @@ from rclpy.node import Node
 from eufs_msgs.msg import ConeArrayWithCovariance, ConeWithCovariance, CarState
 from std_srvs.srv import Trigger
 from sklearn.cluster import DBSCAN
-from sklearn.neighbors import LocalOutlierFactor     # was imported from sklearn.cluster (crash)
+from sklearn.neighbors import LocalOutlierFactor
 from scipy.spatial import KDTree
 
 COLOURS = ("blue", "yellow", "orange")
@@ -104,9 +104,8 @@ def split_wide_clusters(det, labels, eps, min_samples, max_std=0.25, levels=2):
 def cluster_cones(det, eps=0.7, min_samples=3, lof_neighbors=10, keep_per_cone=60, max_noise_age=60.0):
     """det: (N, 4) [x, y, weight, time] -> (cones (M, 2), cov (M, 2, 2), det_kept, counts (M,)).
 
-    LOF only decides what goes into the clustering this time; it does not
-    delete anything (deleting LOF outliers removed cones that were only seen
-    a few times). Detections that never joined a cone are dropped after
+    LOF only decides what goes into the clustering this time, it does not
+    delete anything, otherwise cones that were seen only a few times vanish. Detections that never joined a cone are dropped after
     max_noise_age seconds, and big clusters keep only their best detections,
     so memory stays bounded on long runs."""
     empty = (np.zeros((0, 2)), np.zeros((0, 2, 2)), det, np.zeros(0, int))
@@ -181,8 +180,8 @@ class ConeMapper(object):
 
     def _correct(self, cones_car, pose):
         """Match near cones with well established map cones and nudge the
-        correction. Translation only: the IMU heading is already good, and
-        rotating around a few noisy matches did more harm than good."""
+        correction. Translation only, the IMU heading is already good and
+        rotating around a few noisy matches made it worse in my tests."""
         src, dst = [], []
         cp = self.corrected_pose(pose)
         for c in ("blue", "yellow"):

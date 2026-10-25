@@ -5,8 +5,8 @@ Idea: take the middle point between every blue cone and the yellow cone
 across from it, sort the middle points starting from the car, and fit a
 spline through them.
 
-First version paired blue[i] with yellow[i] straight from the message.
-The message order is NOT the track order, so in corners it was joining
+My first version paired blue[i] with yellow[i] straight from the message.
+But the message order is not the track order, so in corners it joined
 cones from different parts of the track and the path went zig-zag.
 Now every blue cone is paired with the closest yellow cone (and the other
 way round) and pairs wider than a normal track are thrown away.
