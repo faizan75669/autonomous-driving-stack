@@ -13,9 +13,9 @@ How it works, in short:
   3. walk from gate to gate starting in front of the car
   4. fit a smoothing spline from the car through the gate midpoints
 
-This replaced my earlier midpoint and RRT planners (see the other two
-files in this folder), mainly because those paired cones by their index in
-the message and not by where they actually are on the track.
+I moved to this after the midpoint planner, because the midpoint planner
+went zig-zag in corners. The RRT planner in this folder came after this one
+and uses these Delaunay midpoints to guide its sampling.
 """
 
 import numpy as np

@@ -1,15 +1,38 @@
 # Autonomous Driving Stack
 
-Hi, I am Faizan. This repo has the driverless software I worked on as a member of the
-driverless software team of **Team FERN**, our Formula Student team. Team FERN took part in
-**Formula Student AI (FS-AI) 2025 at Silverstone, UK**, where the car has to drive itself
-around a track marked only by cones: blue on the left, yellow on the right, orange at the
-start line.
+Hi, I am Faizan. I was the autonomous software developer of **Team FERN** from
+**Pakistan Navy Engineering College (PNEC)**. We took part in **Formula Student AI
+(FS-AI) 2025 at Silverstone, UK**, and as far as we know it was the first time a team from
+Pakistan ran a driverless car there. We finished **17th overall (290.7 points)** in the
+Dynamic Driving Task class, where teams write the autonomous software for the IMechE
+ADS-DV car.
 
-My work was mostly on the software side of the car: estimating where the car is, building
-a map of the cones, planning a path between them and controlling the steering and speed to
-follow that path. We developed and tested everything in the
+In FS-AI the car drives itself around a track marked only by cones: blue on the left,
+yellow on the right, orange at the start line. All the autonomous software in this repo
+(planning, state estimation, mapping and control) is my work; the rest of the team worked
+on the other parts of the project. I developed and tested it in the
 [EUFS simulator](https://gitlab.com/eufs/eufs_sim) on ROS 2.
+
+<p align="center">
+  <img src="driverless-software/docs/media/fsai_2025_results.png" width="620" alt="FS-AI 2025 overall results, PNEC 17th with 290.7 points"><br>
+  <em>FS-AI 2025 overall results (IMechE). Team FERN / PNEC is car 146, 17th place.</em>
+</p>
+
+## What I worked on, in order
+
+1. **Path planning from cone positions.** I started with a simple midpoint planner (middle
+   point between blue and yellow cones). It went zig-zag in corners, so I moved to
+   **Delaunay triangulation** of the cones, then worked on **RRT / RRT\***, and in the end
+   combined the two: the RRT samples around the Delaunay midpoints so the tree grows along
+   the track.
+2. **EKF** for the car's position, using wheel odometry, IMU and GPS.
+3. **Localisation and cone mapping on top of the EKF** (the SLAM part): putting cone
+   detections into a map, clustering them, counting laps and detecting loop closure.
+4. **Control**: pure pursuit for steering and PID for speed first, then I implemented
+   **Stanley** as well to compare the two.
+
+All of these are in this repo, so you can see the planners side by side and compare the
+controllers on the same tracks.
 
 <p align="center">
   <img src="driverless-software/docs/media/trackdrive.gif" width="560" alt="Car driving the peanut track, planned trajectory in green"><br>
@@ -25,7 +48,7 @@ the car's software is split (each one is a ROS 2 package):
 |---|---|
 | [`state_estimation/`](driverless-software/state_estimation) | EKF that fuses wheel odometry, IMU yaw and GPS into the car's pose |
 | [`slam/`](driverless-software/slam) | Builds the cone map, corrects the pose against it, counts laps, detects loop closure |
-| [`planning/`](driverless-software/planning) | Three local planners: midpoint (my first one), RRT, and the Delaunay planner we use |
+| [`planning/`](driverless-software/planning) | Midpoint planner, Delaunay planner, and RRT guided by Delaunay midpoints |
 | [`control/`](driverless-software/control) | Pure pursuit and Stanley steering controllers with PID speed control |
 | [`bringup/`](driverless-software/bringup) | One launch file + one params file to run the whole stack with the simulator |
 | [`tools/offline_sim/`](driverless-software/tools/offline_sim) | Small Python simulator to test the real nodes without Gazebo |
@@ -59,5 +82,5 @@ To run it with ROS 2 and the EUFS simulator, see
 
 - [EUFS simulator](https://gitlab.com/eufs/eufs_sim) (MIT) by Edinburgh University Formula Student, the track files in `tools/offline_sim/tracks` are theirs.
 - The EKF started from Atsushi Sakai's [PythonRobotics](https://github.com/AtsushiSakai/PythonRobotics), the GPS conversion is from [geonav_transform](https://github.com/bsb808/geonav_transform).
-- My teammates at Team FERN, a lot of this was built and debugged together.
+- The rest of Team FERN, who worked on the other parts of the project and made the competition happen.
 - Some of the refactoring (the Delaunay gate planner, the controller clean-up) and the offline test setup were done with help from an AI coding assistant (Claude).
