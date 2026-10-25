@@ -1,15 +1,26 @@
 # Autonomous Driving Stack
 
-Hi, I am Faizan. This repo has the driverless software I worked on as a member of the
-driverless software team of **Team FERN**, our Formula Student team. Team FERN took part in
-**Formula Student AI (FS-AI) 2025 at Silverstone, UK**, where the car has to drive itself
-around a track marked only by cones: blue on the left, yellow on the right, orange at the
-start line.
-
-My work was mostly on the software side of the car: estimating where the car is, building
-a map of the cones, planning a path between them and controlling the steering and speed to
-follow that path. We developed and tested everything in the
+Hi, I am Faizan. I was the autonomous software developer in **Team FERN**, our Formula
+Student team, which took part in **Formula Student AI (FS-AI) 2025 at Silverstone, UK**.
+In FS-AI the car drives itself around a track marked only by cones: blue on the left,
+yellow on the right, orange at the start line. We developed and tested the software in the
 [EUFS simulator](https://gitlab.com/eufs/eufs_sim) on ROS 2.
+
+## What I worked on, in order
+
+1. **Path planning from cone positions.** I started with a simple midpoint planner (middle
+   point between blue and yellow cones). It went zig-zag in corners, so I moved to
+   **Delaunay triangulation** of the cones, then worked on **RRT / RRT\***, and in the end
+   combined the two: the RRT samples around the Delaunay midpoints so the tree grows along
+   the track.
+2. **EKF** for the car's position, using wheel odometry, IMU and GPS.
+3. **Localisation and cone mapping on top of the EKF** (our SLAM part): putting cone
+   detections into a map, clustering them, counting laps and detecting loop closure.
+4. **Control**: pure pursuit for steering and PID for speed first, then I implemented
+   **Stanley** as well to compare the two.
+
+All of these are in this repo, so you can see the planners side by side and compare the
+controllers on the same tracks.
 
 <p align="center">
   <img src="driverless-software/docs/media/trackdrive.gif" width="560" alt="Car driving the peanut track, planned trajectory in green"><br>
@@ -25,7 +36,7 @@ the car's software is split (each one is a ROS 2 package):
 |---|---|
 | [`state_estimation/`](driverless-software/state_estimation) | EKF that fuses wheel odometry, IMU yaw and GPS into the car's pose |
 | [`slam/`](driverless-software/slam) | Builds the cone map, corrects the pose against it, counts laps, detects loop closure |
-| [`planning/`](driverless-software/planning) | Three local planners: midpoint (my first one), RRT, and the Delaunay planner we use |
+| [`planning/`](driverless-software/planning) | Midpoint planner, Delaunay planner, and RRT guided by Delaunay midpoints |
 | [`control/`](driverless-software/control) | Pure pursuit and Stanley steering controllers with PID speed control |
 | [`bringup/`](driverless-software/bringup) | One launch file + one params file to run the whole stack with the simulator |
 | [`tools/offline_sim/`](driverless-software/tools/offline_sim) | Small Python simulator to test the real nodes without Gazebo |

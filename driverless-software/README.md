@@ -33,7 +33,7 @@ measurement. It started from the PythonRobotics EKF example.
 
 ![EKF estimate](docs/media/ekf_estimate.png)
 
-### slam (cone map)
+### slam (localisation and cone map on top of the EKF)
 Every cone detection is put in the map frame using the EKF pose. Close detections count
 more than far ones (camera depth noise grows a lot with distance). DBSCAN groups the
 detections of the same cone, and LocalOutlierFactor keeps random wrong detections out.
@@ -46,21 +46,26 @@ It publishes `/slam/map` and `/slam/pose`, `/slam/reset` clears the map, and wit
 ![Cone map](docs/media/cone_map.png)
 
 ### planning
-I wrote three planners, in this order:
+I did the planners in this order:
 
 1. **Midpoint planner**: middle point between each cone and the nearest cone of the other
-   colour, sorted from the car, then a spline. Simple, works when the track is clear.
-2. **RRT planner**: an RRT grown from the car, sampling around the midpoints, with collision
-   checks against the cones. Works, but the path is wobbly. Plain RRT, not RRT*.
-3. **Delaunay planner** (the one we use): triangulate the cones, keep the blue-yellow edges
+   colour, sorted from the car, then a spline. Simple, works when the track is clear, but
+   my first version paired cones in the order they came in the message and went zig-zag in
+   corners.
+2. **Delaunay planner** (the one we use): triangulate the cones, keep the blue-yellow edges
    ("gates"), walk from gate to gate starting at the car, fit a spline. It does not get
    confused by cones from other parts of the track, because those never make a blue-yellow gate.
+3. **RRT with Delaunay**: an RRT grown from the car, sampling around the Delaunay midpoints,
+   with collision checks against the cones, then the best branch is smoothed. I also worked
+   on RRT\*, but the version in this repo does not do the RRT\* rewiring step yet, so it is
+   plain RRT and the path is a bit wobbly. Finishing RRT\* is on the to-do list.
 
 ![Planner comparison](docs/media/planner_comparison.png)
 
 ### control
-Pure pursuit and Stanley for steering, both with a PID on speed. The target speed comes from
-the curvature of the path, so the car slows down before corners.
+I did pure pursuit for steering with a PID on speed first, then implemented Stanley to
+compare the two. The target speed comes from the curvature of the path, so the car slows
+down before corners.
 
 ### bringup
 One launch file and one `params.yaml` with all the settings.
@@ -135,7 +140,7 @@ most of the bugs (wrong frame, wrong sign, crash on an empty message) show up he
 
 - [ ] Pose-graph SLAM so long runs without GPS stay consistent
 - [ ] Mix Stanley and pure pursuit for the tight hairpins
-- [ ] RRT* version of the RRT planner
+- [ ] Finish RRT* (add the rewiring step to the RRT planner)
 - [ ] Try an MPC controller
 - [ ] Run from real perception instead of ground-truth cones
 

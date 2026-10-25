@@ -1,5 +1,5 @@
 """
-RRT planner with Delaunay triangulation (my second planner, experimental).
+RRT planner guided by Delaunay triangulation (experimental).
 
 1. Delaunay triangulation of the visible cones, keep the blue-yellow edges
    and take their midpoints. Chain them starting from the car (nearest
@@ -12,8 +12,9 @@ RRT planner with Delaunay triangulation (my second planner, experimental).
 4. The branch that gets furthest along the track is the path, then a
    smoothing spline takes out most of the RRT zig-zag.
 
-This is plain RRT (no rewiring), so the path is a bit wobbly and changes
-from frame to frame. For the real runs we used the Delaunay planner.
+This is plain RRT, the RRT* rewiring step is not in here yet, so the path
+is a bit wobbly and changes from frame to frame. For the full runs we used
+the Delaunay planner.
 
 Subscribes : /ground_truth/cones (car frame)
 Publishes  : /trajectory, /planner/viz
