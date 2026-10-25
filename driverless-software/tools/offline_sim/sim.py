@@ -45,6 +45,10 @@ CONTROLLERS = {"pure_pursuit": ("control.pure_pursuit_node", "PurePursuit"),
                "stanley": ("control.stanley_node", "Stanley")}
 
 
+def wrap_angle(a):
+    return (a + math.pi) % (2.0 * math.pi) - math.pi
+
+
 # ----------------------------------------------------------------- world
 def load_track(name):
     cones = {"blue": [], "yellow": [], "orange": [], "big_orange": []}
@@ -107,8 +111,11 @@ class Car(object):
 
 # ----------------------------------------------------------------- run
 def run(track, planner="delaunay_planner", controller="pure_pursuit", T=300.0, dt=0.02,
-        record_every=5, params=None, seed=0):
-    """Drive one lap. Returns a dict with the lap result and recorded frames."""
+        record_every=5, params=None, seed=0, laps=1, on_step=None):
+    """Drive `laps` laps. Returns a dict with the result and recorded frames.
+
+    on_step(t, car, cones) is called after every simulation step, so other
+    nodes (EKF, mapping) can be fed from the same run."""
     fake_ros.reset()
     np.random.seed(seed)
     fake_ros.PARAMS["seed"] = seed       # used by the RRT planner
@@ -130,6 +137,7 @@ def run(track, planner="delaunay_planner", controller="pure_pursuit", T=300.0, d
     boundary = np.vstack([cones["blue"], cones["yellow"]])
     start_xy = np.array(start[:2])
     frames, left_start, lap, t = [], False, False, 0.0
+    laps_done = 0
     hit_cones = set()
     for i in range(int(T / dt)):
         state = fake_ros.Msg()
@@ -146,6 +154,8 @@ def run(track, planner="delaunay_planner", controller="pure_pursuit", T=300.0, d
         clearance = float(np.min(dists))
         # car is 1.4 m wide: a cone closer than 0.5 m to its centre is under a wheel
         hit_cones.update(np.nonzero(dists < 0.5)[0].tolist())
+        if on_step is not None:
+            on_step(t, car, cones)
         if i % record_every == 0:
             traj = fake_ros.LAST.get("/trajectory")
             path = np.array([[w.position.x, w.position.y] for w in traj.waypoints]).reshape(-1, 2) \
@@ -158,11 +168,14 @@ def run(track, planner="delaunay_planner", controller="pure_pursuit", T=300.0, d
         if dist_start > 20.0:
             left_start = True
         if left_start and dist_start < 3.0:
-            lap = True
-            break
+            laps_done += 1
+            left_start = False
+            if laps_done >= laps:
+                lap = True
+                break
         if clearance > 6.0 and i > 100:     # way off the track
             break
-    return dict(track=track, planner=planner, controller=controller, lap=lap, time=t,
+    return dict(track=track, planner=planner, controller=controller, lap=lap, time=t, laps=laps_done,
                 cones_hit=len(hit_cones),
                 min_clearance=min(f["clearance"] for f in frames),
                 mean_speed=float(np.mean([f["v"] for f in frames])),

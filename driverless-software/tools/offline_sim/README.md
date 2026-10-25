@@ -7,6 +7,7 @@ A small closed-loop simulator so the nodes can be tested without ROS or Gazebo.
 | `fake_ros.py` | Minimal stand-in for `rclpy` and the message types our nodes use |
 | `sim.py` | Track loading, EUFS-style cone visibility, kinematic bicycle car, lap runner |
 | `results_table.py` | Runs every planner/controller pair on every track, prints the README table |
+| `slam_eval.py` | Drifting odometry + IMU (+ GPS) + EUFS-style noisy cones into the real EKF and mapping nodes, measures pose and map error |
 | `make_figures.py` | Makes the figures in `docs/media` |
 | `tracks/` | Track files from the [EUFS simulator](https://gitlab.com/eufs/eufs_sim) (MIT, see `LICENSE_EUFS`) |
 
