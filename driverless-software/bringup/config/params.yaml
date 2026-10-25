@@ -1,0 +1,43 @@
+# Parameters for the FERN driverless stack (EUFS sim, DryTrack car).
+# Values here were tuned in the offline simulator (tools/offline_sim).
+
+state_estimation:
+  ros__parameters:
+    dt: 0.05
+    use_imu_yaw: true
+    add_sim_noise: false
+
+cone_mapping:
+  ros__parameters:
+    cones_topic: /ground_truth/cones
+    pose_topic: /odometry_filtered/car_state
+    max_range: 12.0
+    plot: false            # true -> live matplotlib map
+
+planner:
+  ros__parameters:
+    cones_topic: /ground_truth/cones
+    # delaunay_planner
+    track_width: 3.5
+    path_spacing: 0.25
+    smoothing: 0.3
+    racing_line: false
+    # rrt_planner
+    max_samples: 400
+    step_size: 1.0
+    cone_clearance: 0.9
+
+controller:
+  ros__parameters:
+    path_topic: /trajectory
+    state_topic: /ground_truth/state
+    max_speed: 3.0          # m/s, raise slowly
+    max_lat_acc: 4.5        # m/s^2, lower = slower in corners
+    max_steering: 0.52      # rad, EUFS steering lock
+    # pure_pursuit
+    wheelbase: 1.53         # ADS-DV, the FS-AI car
+    look_ahead_min: 2.5
+    look_ahead_gain: 0.5
+    # stanley
+    stanley_k: 1.5
+    front_axle_x: 0.87

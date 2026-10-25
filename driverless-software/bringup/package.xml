@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>bringup</name>
+  <version>1.0.0</version>
+  <description>Launch files and parameters to run the full stack with the EUFS simulator</description>
+  <maintainer email="149727349+faizan75669@users.noreply.github.com">faizan75669</maintainer>
+  <license>MIT</license>
+
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>eufs_launcher</exec_depend>
+  <exec_depend>state_estimation</exec_depend>
+  <exec_depend>slam</exec_depend>
+  <exec_depend>planning</exec_depend>
+  <exec_depend>control</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
