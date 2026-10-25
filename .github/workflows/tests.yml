@@ -1,0 +1,19 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  offline-tests:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"    # same as ROS 2 Galactic on Ubuntu 20.04
+      - name: Install dependencies
+        run: pip install numpy scipy scikit-learn matplotlib pytest
+      - name: Run tests (no ROS needed)
+        working-directory: driverless-software
+        run: python -m pytest tests -v

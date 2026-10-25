@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+
+# colcon / ROS 2 workspace output
+build/
+install/
+log/
+
+# editors
+.vscode/
+.idea/
+*.swp
