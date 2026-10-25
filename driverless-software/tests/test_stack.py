@@ -53,7 +53,7 @@ def test_planner_follows_straight(planner):
 
 
 def test_delaunay_planner_ignores_message_order():
-    """The old bug: blue[i] was paired with yellow[i]. Shuffling must not matter."""
+    """Cone order in the message must not change the path (my first planner had this bug)."""
     blue, yellow = straight_track()
     rng = np.random.default_rng(1)
     a = plan_once("delaunay_planner", blue, yellow)
