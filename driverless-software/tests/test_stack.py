@@ -122,19 +122,60 @@ def test_ekf_tracks_noisy_odometry():
 
 # ------------------------------------------------------------------ mapping
 def test_cone_mapping_rebuilds_track():
+    """Perfect pose, noise-free cones: map must match the track almost exactly."""
     from slam.cone_mapping_node import ConeMapper
-    r = sim.run("small_track", record_every=1)
-    mapper = ConeMapper()
-    for f in r["frames"][::2]:
+    r = sim.run("small_track", record_every=1, laps=2)
+    mapper = ConeMapper(pose_correction=False)
+    for k, f in enumerate(r["frames"][::5]):          # 10 Hz like a camera
         obs = sim.visible_cones(r["cones"], (f["x"], f["y"], f["yaw"]))
         mapper.add_frame({"blue": obs["blue"], "yellow": obs["yellow"], "orange": obs["big_orange"]},
-                         (f["x"], f["y"], f["yaw"]))
+                         (f["x"], f["y"], f["yaw"]), f["t"])
+        if k % 10 == 0:
+            mapper.update_map()
     m = mapper.update_map()
     for colour in ("blue", "yellow"):
         true = r["cones"][colour]
         err = np.array([np.min(np.linalg.norm(m[colour] - c, axis=1)) for c in true])
-        assert np.mean(err < 0.3) > 0.9, f"{colour}: most cones should be mapped within 30 cm"
-    assert mapper.laps == 1, "one lap driven, one lap counted"
+        assert np.all(err < 0.1), f"{colour}: every cone should be mapped within 10 cm"
+        assert len(m[colour]) == len(true), f"{colour}: no extra cones"
+    assert mapper.laps == 1, "the start line was passed once after leaving it"
+
+
+@pytest.fixture(scope="module")
+def slam_runs():
+    """Full closed loop: drifting odometry + IMU (+ GPS) -> EKF node -> mapping node,
+    EUFS-style noisy cone detections, two laps of small_track."""
+    import slam_eval
+    return {gps: slam_eval.evaluate("small_track", laps=2, use_gps=gps, seed=1) for gps in (True, False)}
+
+
+def test_slam_with_gps_maps_every_cone(slam_runs):
+    r = slam_runs[True]
+    assert r["matched"] == r["n_true"], "every cone within 0.5 m"
+    assert r["mean_err"] < 0.2
+    assert r["false"] == 0, "no cones that do not exist"
+    assert r["ekf_err_mean"] < 0.3
+
+
+def test_slam_without_gps_stays_usable(slam_runs):
+    """Without GPS the whole map can shift by the odometry drift (nothing absolute
+    to correct it), but its SHAPE must be right."""
+    r = slam_runs[False]
+    assert r["ekf_err_max"] < 1.0, "dead reckoning with IMU yaw should drift < 1 m in two laps"
+    assert r["aligned_matched"] == r["n_true"], "after removing the global shift every cone is within 0.5 m"
+    assert r["aligned_mean_err"] < 0.25
+    assert r["matched"] >= 0.75 * r["n_true"]
+    assert r["false"] == 0
+
+
+@pytest.mark.parametrize("gps", [True, False])
+def test_laps_and_loop_closure(slam_runs, gps):
+    r = slam_runs[gps]
+    assert r["laps_counted"] == r["line_passes"] == 1
+    lap_time = r["lap_time"] / r["laps_driven"]
+    # loop closure must come when the car is back at the start, not before
+    assert r["loop_closure_time"] is not None
+    assert 0.9 * lap_time < r["loop_closure_time"] < 1.3 * lap_time
 
 
 # ------------------------------------------------------------------ ROS node wiring
@@ -170,7 +211,7 @@ def test_cone_mapping_node_publishes_map():
     from slam.cone_mapping_node import ConeMappingNode
     fake_ros.reset()
     node = ConeMappingNode()
-    blue, yellow = straight_track(length=12.0)     # node ignores cones further than 12 m
+    blue, yellow = straight_track(length=10.0)     # node ignores cones further than 10 m
     for i in range(60):
         fake_ros.SIM["t"] = i * 0.1
         fake_ros.publish("/odometry_filtered/car_state", _car_state(0.0, 0.0, 0.0, 0.0, 0.0))
@@ -180,3 +221,37 @@ def test_cone_mapping_node_publishes_map():
     m = fake_ros.LAST["/slam/map"]
     assert len(m.blue_cones) >= len(blue) - 1
     assert len(m.yellow_cones) >= len(yellow) - 1
+
+
+def test_slam_reset_service_clears_map():
+    from slam.cone_mapping_node import ConeMappingNode
+    fake_ros.reset()
+    node = ConeMappingNode()
+    blue, yellow = straight_track(length=10.0)
+    obs = {"blue": blue, "yellow": yellow, "orange": np.zeros((0, 2)), "big_orange": np.zeros((0, 2))}
+    for i in range(20):
+        fake_ros.SIM["t"] = i * 0.1
+        fake_ros.publish("/odometry_filtered/car_state", _car_state(0.0, 0.0, 0.0, 0.0, 0.0))
+        fake_ros.publish("/ground_truth/cones", sim.cones_msg(obs))
+        node.spin_timers()
+    assert len(node.mapper.map["blue"]) > 0
+    resp = node.reset_cb(None, fake_ros.Msg())
+    assert resp.success
+    assert len(node.mapper.map["blue"]) == 0 and len(node.mapper.detections["blue"]) == 0
+
+
+def test_slam_plot_mode_runs():
+    import matplotlib
+    matplotlib.use("Agg")
+    from slam.cone_mapping_node import ConeMappingNode
+    fake_ros.reset()
+    fake_ros.PARAMS["plot"] = True
+    node = ConeMappingNode()
+    blue, yellow = straight_track(length=10.0)
+    obs = {"blue": blue, "yellow": yellow, "orange": np.zeros((0, 2)), "big_orange": np.zeros((0, 2))}
+    for i in range(25):
+        fake_ros.SIM["t"] = i * 0.1
+        fake_ros.publish("/odometry_filtered/car_state", _car_state(0.1 * i, 0.0, 0.0, 1.0, 0.0))
+        fake_ros.publish("/ground_truth/cones", sim.cones_msg(obs))
+        node.spin_timers()
+    assert len(node.ax.patches) == 1, "uncertainty ellipse drawn"

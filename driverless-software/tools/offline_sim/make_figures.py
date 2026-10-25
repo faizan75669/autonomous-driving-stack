@@ -153,33 +153,32 @@ def fig_ekf():
 
 
 # ----------------------------------------------------------------- 4. map
-def fig_map():
-    from slam.cone_mapping_node import ConeMapper
-    r = sim.run("small_track", record_every=1)
-    rng = np.random.default_rng(5)
-    mapper = ConeMapper()
-    for f in r["frames"][::2]:
-        obs = sim.visible_cones(r["cones"], (f["x"], f["y"], f["yaw"]))
-        noisy = {k: v + rng.normal(0, 0.08, v.shape) for k, v in obs.items()}   # like a real detector
-        mapper.add_frame({"blue": noisy["blue"], "yellow": noisy["yellow"], "orange": noisy["big_orange"]},
-                         (f["x"], f["y"], f["yaw"]))
-    m = mapper.update_map()
-    det = np.array(mapper.detections["blue"] + mapper.detections["yellow"])
-    fig, ax = plt.subplots(figsize=(9, 6.2))
-    ax.scatter(*det[::5].T, s=2, color=INK2, alpha=0.3, linewidths=0, label="raw detections (map frame)")
-    for colour, c in (("blue", BLUE), ("yellow", YELLOW)):
-        true = r["cones"][colour]
-        ax.scatter(*true.T, s=70, facecolors="none", edgecolors=INK, linewidths=0.8, zorder=3)
-        ax.scatter(*m[colour].T, s=26, color=c, zorder=4, label=f"mapped {colour} cones")
-    ax.scatter([], [], s=70, facecolors="none", edgecolors=INK, linewidths=0.8, label="true cone position")
-    err = [np.min(np.linalg.norm(m[c] - p, axis=1)) for c in ("blue", "yellow") for p in r["cones"][c]]
-    ax.set_title(f"Cone map after one lap of small_track: mean error {100 * np.mean(err):.0f} cm, "
-                 f"laps counted: {mapper.laps}", loc="left")
-    ax.set_aspect("equal")
-    ax.set_xlabel("x [m]")
-    ax.set_ylabel("y [m]")
-    ax.legend(loc="center", fontsize=9)
-    fig.tight_layout()
+def fig_map(track="peanut"):
+    """Closed loop: drifting odometry + IMU (+ GPS) -> EKF node -> mapping node."""
+    import slam_eval
+    fig, axs = plt.subplots(1, 2, figsize=(15, 5.6), sharex=True, sharey=True)
+    for ax, gps in zip(axs, (True, False)):
+        r = slam_eval.evaluate(track, laps=2, use_gps=gps)
+        h = r["ekf_hist"]
+        for colour, c in (("blue", BLUE), ("yellow", YELLOW)):
+            ax.scatter(*r["cones"][colour].T, s=70, facecolors="none", edgecolors=INK, linewidths=0.8, zorder=3)
+            ax.scatter(*r["map"][colour].T, s=24, color=c, zorder=4)
+        ax.plot(h[:, 1], h[:, 2], color=INK2, lw=1.0, ls="--", label="true path")
+        ax.plot(h[:, 5], h[:, 6], color=PATH, lw=1.4, label="SLAM pose")
+        ax.scatter([], [], s=70, facecolors="none", edgecolors=INK, linewidths=0.8, label="true cone")
+        ax.scatter([], [], s=24, color=BLUE, label="mapped cone")
+        title = "with GPS (0.5 m noise)" if gps else "without GPS (dead reckoning + map)"
+        ax.set_title(f"{title}\nmean cone error {100 * r['mean_err']:.0f} cm, "
+                     f"{r['matched']}/{r['n_true']} cones within 0.5 m, {r['false']} fake cones",
+                     loc="left", fontsize=10)
+        ax.set_aspect("equal")
+        ax.set_xlabel("x [m]")
+    axs[0].set_ylabel("y [m]")
+    fig.legend(*axs[0].get_legend_handles_labels(), loc="lower center", ncol=4, fontsize=9,
+               bbox_to_anchor=(0.5, -0.02))
+    fig.suptitle(f"Cone map after 2 laps of {track}: EKF + cone mapping, noisy detections",
+                 fontsize=12, fontweight="bold", x=0.01, ha="left")
+    fig.tight_layout(rect=(0, 0.05, 1, 1))
     save(fig, "cone_map.png")
 
 

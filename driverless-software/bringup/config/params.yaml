@@ -4,15 +4,19 @@
 state_estimation:
   ros__parameters:
     dt: 0.05
+    gps_noise: 0.5             # m, std of the GPS position
+    imu_yaw_noise: 0.02        # rad
     use_imu_yaw: true
-    add_sim_noise: false
+    use_odom_position: false   # integrated odometry drifts, only dead-reckon with it
 
 cone_mapping:
   ros__parameters:
     cones_topic: /ground_truth/cones
     pose_topic: /odometry_filtered/car_state
-    max_range: 12.0
-    plot: false            # true -> live matplotlib map
+    max_range: 10.0          # m, detections further away are too noisy
+    pose_correction: true    # match cones with the map to correct the pose
+    loop_closure_age: 30.0   # s, cones first seen this long ago count for loop closure
+    plot: false              # true -> live matplotlib map with EKF uncertainty ellipse
 
 planner:
   ros__parameters:

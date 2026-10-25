@@ -113,7 +113,7 @@ class Node(object):
         """Call timers that are due at the current SIM time."""
         for t in self._timers:
             if SIM["t"] - t[2] >= t[0] - 1e-9:
-                t[2] = SIM["t"]
+                t[2] += t[0] * max(1, int((SIM["t"] - t[2]) / t[0] + 1e-9))   # keep the average rate exact
                 t[1]()
 
     def get_logger(self):
