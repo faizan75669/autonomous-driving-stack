@@ -22,7 +22,7 @@ starting from the perception layer.
 | Computer | NVIDIA Jetson AGX Orin 64 GB, runs everything on board |
 | LiDARs | 4 × RoboSense E1R solid-state LiDAR, 120° horizontal × 90° vertical field of view each |
 | IMU | from the CUAV X25 EVO flight controller (ArduPilot), connected to the Jetson over UART |
-| Network | LiDARs on Ethernet to the Jetson, through an unmanaged switch in the first setup |
+| Network | LiDARs on Ethernet to the Jetson (unmanaged switch in the first setup), time-synced with PTP |
 
 | | |
 |---|---|
@@ -65,8 +65,13 @@ while the drone moves. You get double walls and "ghost" copies of objects, and t
 stops being consistent.
 
 So all four LiDARs had to be synchronised to one clock, the Jetson's, so that a point from
-any LiDAR has a timestamp that means the same thing. In the first setup the LiDARs were
-connected through an unmanaged Ethernet switch.
+any LiDAR has a timestamp that means the same thing. I did this with **PTP** (Precision Time
+Protocol, IEEE 1588): the Jetson acts as the master clock and the four E1Rs sync to it over
+Ethernet, so their point timestamps all come from the same time base.
+
+In the first setup the LiDARs were connected through an unmanaged Ethernet switch. A plain
+unmanaged switch is not PTP-aware (it does not correct for its own delay on the sync
+messages), which is worth knowing when you sync several sensors through one.
 
 ## 3. One virtual LiDAR for FAST-LIO2
 
