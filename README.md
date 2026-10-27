@@ -1,17 +1,12 @@
 # Autonomous Driving Stack
 
-Hi, I am Faizan. This repo has the autonomy work I have done so far: a driverless race car
-for Formula Student AI, and GPS-denied navigation for a hexacopter drone. Each project has
-its own folder.
-
-| Project | Folder |
-|---|---|
-| **Driverless race car**, FS-AI 2025 at Silverstone (Team FERN, PNEC): path planning, EKF, cone mapping, pure pursuit and Stanley control | [`driverless-software/`](driverless-software) |
-| **GPS-denied hexacopter navigation** at Prodigy Airworks: 4 solid-state LiDARs, time sync, FAST-LIO2 SLAM, OctoMap and RRT* on a Jetson AGX Orin | [`gps-denied-uav-navigation/`](gps-denied-uav-navigation) |
+Hi, I am Faizan. This repo has the driverless race car software I wrote for Formula Student
+AI 2025. My other project, GPS-denied navigation for a hexacopter, is in its own repo:
+[non-gps-navigation](https://github.com/faizan75669/Non-Gps-Navigation).
 
 ---
 
-## 1. Driverless race car (FS-AI 2025)
+## Driverless race car (FS-AI 2025)
 
 I was the autonomous software developer of **Team FERN** from **Pakistan Navy Engineering
 College (PNEC)**. We took part in **Formula Student AI (FS-AI) 2025 at Silverstone, UK**,
@@ -89,34 +84,9 @@ python3 tools/offline_sim/sim.py
 To run it with ROS 2 and the EUFS simulator, see
 [Running with ROS 2](driverless-software/README.md#running-with-ros-2).
 
-## 2. GPS-denied hexacopter navigation (Prodigy Airworks)
-
-At Prodigy Airworks I worked on making the company's hexacopter navigate without GPS. I
-built the navigation stack starting from perception: four RoboSense E1R solid-state LiDARs
-mounted 90° apart for 360° coverage, time synchronisation so the overlapping LiDARs do not
-create double objects, a node that merges the four clouds into one virtual LiDAR for
-FAST-LIO2 (with the IMU from the CUAV X25 EVO flight controller over UART), then OctoMap
-for a 3D occupancy map and OMPL RRT* for path planning, all on a Jetson AGX Orin.
-
-The code belongs to the company, so this folder has the write-up, photos and recordings
-instead: [`gps-denied-uav-navigation/README.md`](gps-denied-uav-navigation/README.md).
-
-| | |
-|---|---|
-| ![Hexacopter](gps-denied-uav-navigation/media/hexacopter.jpg) | ![3D map](gps-denied-uav-navigation/media/map_height_coloured.jpg) |
-| The hexacopter in the lab | 3D LiDAR map of the lab |
-
----
-
 ## Credits
-
-Driverless race car:
 
 - [EUFS simulator](https://gitlab.com/eufs/eufs_sim) (MIT) by Edinburgh University Formula Student, the track files in `tools/offline_sim/tracks` are theirs.
 - The EKF started from Atsushi Sakai's [PythonRobotics](https://github.com/AtsushiSakai/PythonRobotics), the GPS conversion is from [geonav_transform](https://github.com/bsb808/geonav_transform).
 - The rest of Team FERN, who worked on the other parts of the project and made the competition happen.
 - Some of the refactoring (the Delaunay gate planner, the controller clean-up) and the offline test setup were done with help from an AI coding assistant (Claude).
-
-GPS-denied navigation: [FAST-LIO2](https://github.com/hku-mars/FAST_LIO) by the HKU MARS lab,
-[OctoMap](https://octomap.github.io/), [OMPL](https://ompl.kavrakilab.org/), and Prodigy
-Airworks for the hardware and for letting me share the photos and recordings.
